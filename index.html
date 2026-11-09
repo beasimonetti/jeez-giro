@@ -113,6 +113,29 @@
     color: #fff;
   }
   .principale:active { background: var(--arancio-scuro); }
+  .secondario {
+    width: 100%;
+    margin-top: 10px;
+    font-size: 17px;
+    padding: 14px;
+    border: 2px solid var(--bordo);
+    border-radius: 14px;
+    background: var(--scheda);
+    color: var(--testo);
+  }
+  .in-modifica { outline: 3px solid var(--arancio); outline-offset: 4px; border-radius: 14px; }
+  .azioni { display: flex; gap: 8px; margin-top: 8px; }
+  .azioni button {
+    flex: 1;
+    font-size: 15px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--bordo);
+    background: var(--scheda);
+    color: var(--testo);
+  }
+  .azioni .cancella { color: var(--rosso); }
+  .azioni .cancella.conferma { background: var(--rosso); color: #fff; border-color: var(--rosso); }
   .errore { color: var(--rosso); font-weight: 600; margin: 0 0 12px; }
   .stato { font-size: 14px; color: var(--grigio); margin: 0 0 12px; }
   .stato.attesa { color: var(--rosso); font-weight: 600; }
@@ -194,9 +217,10 @@
     </div>
 
     <button class="principale" id="salva">Salva visita</button>
+    <button class="secondario nascosto" id="annulla-modifica">Annulla modifica</button>
 
     <div class="scheda" style="margin-top:20px">
-      <label class="titolo">Visite di oggi su questo telefono</label>
+      <label class="titolo">Le tue visite di oggi</label>
       <ul id="storico" class="storico"></ul>
     </div>
   </section>
@@ -290,6 +314,42 @@ document.querySelectorAll('.attivita button').forEach(b => b.onclick = () =>
   b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'));
 
 function due(n) { return String(n).padStart(2, '0'); }
+function oggi() {
+  const d = new Date();
+  return `${d.getFullYear()}-${due(d.getMonth() + 1)}-${due(d.getDate())}`;
+}
+
+let inModifica = null;  // id della visita che si sta modificando
+
+function mostraErrore(testo) {
+  $('errore').textContent = testo;
+  $('errore').classList.remove('nascosto');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function pulisciModulo() {
+  $('macchina').value = '';
+  $('temperatura').value = '';
+  $('note').value = '';
+  document.querySelectorAll('.attivita button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+}
+
+function esciModifica() {
+  inModifica = null;
+  pulisciModulo();
+  $('salva').textContent = 'Salva visita';
+  $('annulla-modifica').classList.add('nascosto');
+  $('vista-visita').classList.remove('in-modifica');
+}
+
+$('annulla-modifica').onclick = () => { esciModifica(); disegnaStorico(); };
+
+function accoda(voce) {
+  // In coda resta solo l'ultima versione di ogni visita
+  codaInvio = codaInvio.filter(v => v.id !== voce.id);
+  codaInvio.push(voce);
+  scrivi('coda', codaInvio);
+}
 
 $('salva').onclick = () => {
   const codice = $('macchina').value;
@@ -297,23 +357,12 @@ $('salva').onclick = () => {
   const temperatura = Number(tempTesto);
   $('errore').classList.add('nascosto');
 
-  let problema = '';
-  if (!codice) problema = 'Scegli la macchina.';
-  else if (tempTesto === '' || !isFinite(temperatura)) problema = 'Scrivi la temperatura (solo il numero).';
-  if (problema) {
-    $('errore').textContent = problema;
-    $('errore').classList.remove('nascosto');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    return;
-  }
+  if (!codice) return mostraErrore('Scegli la macchina.');
+  if (tempTesto === '' || !isFinite(temperatura)) return mostraErrore('Scrivi la temperatura (solo il numero).');
 
-  const ora = new Date();
   const m = elenchi.macchine.find(x => x.codice === codice) || {};
   const spuntato = campo => document.querySelector(`.attivita [data-campo=${campo}]`).getAttribute('aria-pressed') === 'true';
-  const visita = {
-    id: ora.getTime().toString(36) + Math.random().toString(36).slice(2, 7),
-    data: `${ora.getFullYear()}-${due(ora.getMonth() + 1)}-${due(ora.getDate())}`,
-    ora: `${due(ora.getHours())}:${due(ora.getMinutes())}`,
+  const campi = {
     operatore,
     macchina: codice,
     posizione: m.posizione || '',
@@ -323,42 +372,90 @@ $('salva').onclick = () => {
     scarti: spuntato('scarti'),
     temperatura,
     note: $('note').value.trim(),
+    modificata: Date.now(),
   };
 
-  codaInvio.push(visita);
-  scrivi('coda', codaInvio);
-  storico.unshift(visita);
-  storico = storico.slice(0, 50);
+  let visita;
+  const eraModifica = !!inModifica;
+  if (eraModifica) {
+    const vecchia = storico.find(v => v.id === inModifica);
+    if (!vecchia || vecchia.data !== oggi()) {
+      esciModifica();
+      disegnaStorico();
+      return mostraErrore('Si possono modificare solo le visite di oggi.');
+    }
+    visita = { ...vecchia, ...campi };
+    storico = storico.map(v => v.id === visita.id ? visita : v);
+  } else {
+    const ora = new Date();
+    visita = {
+      id: ora.getTime().toString(36) + Math.random().toString(36).slice(2, 7),
+      data: oggi(),
+      ora: `${due(ora.getHours())}:${due(ora.getMinutes())}`,
+      ...campi,
+    };
+    storico.unshift(visita);
+    storico = storico.slice(0, 50);
+  }
   scrivi('storico', storico);
+  accoda(visita);
 
-  // Pulisce il modulo per la prossima macchina
-  $('macchina').value = '';
-  $('temperatura').value = '';
-  $('note').value = '';
-  document.querySelectorAll('.attivita button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  esciModifica();
   window.scrollTo({ top: 0, behavior: 'smooth' });
-
-  avviso('Visita salvata');
+  avviso(eraModifica ? 'Modifica salvata' : 'Visita salvata');
   disegnaStorico();
   inviaCoda();
 };
+
+function modifica(id) {
+  const v = storico.find(x => x.id === id);
+  if (!v || v.data !== oggi()) return;
+  inModifica = id;
+  $('macchina').value = v.macchina;
+  $('temperatura').value = String(v.temperatura).replace('.', ',');
+  $('note').value = v.note;
+  for (const campo of ['arance', 'pulizia', 'bicchieri', 'scarti'])
+    document.querySelector(`.attivita [data-campo=${campo}]`).setAttribute('aria-pressed', v[campo] ? 'true' : 'false');
+  $('salva').textContent = 'Salva modifiche';
+  $('annulla-modifica').classList.remove('nascosto');
+  $('vista-visita').classList.add('in-modifica');
+  $('errore').classList.add('nascosto');
+  disegnaStorico();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cancella(id) {
+  const v = storico.find(x => x.id === id);
+  if (!v || v.data !== oggi()) return;
+  storico = storico.filter(x => x.id !== id);
+  scrivi('storico', storico);
+  accoda({ id, data: v.data, cancellata: true, modificata: Date.now() });
+  if (inModifica === id) esciModifica();
+  avviso('Visita cancellata');
+  disegnaStorico();
+  inviaCoda();
+}
 
 // ---------- Invio (anche quando torna la rete) ----------
 let invioInCorso = false;
 async function inviaCoda() {
   if (invioInCorso || !codaInvio.length) { disegnaStato(); return; }
   invioInCorso = true;
+  const inviate = codaInvio.slice();
   try {
     const r = await fetch(URL_SERVER, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ azione: 'visite', k: chiave, visite: codaInvio }),
+      body: JSON.stringify({ azione: 'visite', k: chiave, visite: inviate }),
     });
     const d = await r.json();
     if (d.ok) {
+      // Toglie dalla coda solo le versioni inviate: una modifica fatta nel frattempo resta in coda
       const ricevute = new Set(d.ricevute);
-      codaInvio = codaInvio.filter(v => !ricevute.has(v.id));
+      codaInvio = codaInvio.filter(v => !(ricevute.has(v.id) && inviate.includes(v)));
       scrivi('coda', codaInvio);
+      if (d.rifiutate && d.rifiutate.length)
+        avviso('Alcune modifiche non sono state accettate: si possono cambiare solo le visite di oggi.');
     }
   } catch (e) { /* riprova più tardi */ }
   invioInCorso = false;
@@ -375,14 +472,33 @@ function disegnaStato() {
 }
 
 function disegnaStorico() {
-  const oggi = new Date();
-  const dataOggi = `${oggi.getFullYear()}-${due(oggi.getMonth() + 1)}-${due(oggi.getDate())}`;
   const inAttesa = new Set(codaInvio.map(v => v.id));
-  const visite = storico.filter(v => v.data === dataOggi);
-  $('storico').innerHTML = visite.length ? visite.map(v =>
-    `<li><strong>${esc(v.ora)}</strong> · ${esc(v.macchina)} – ${esc(v.posizione)} · ${String(v.temperatura).replace('.', ',')} °C<br>
-     <small>${inAttesa.has(v.id) ? '⏳ in attesa di invio' : '✓ inviata'}</small></li>`).join('')
-    : '<li><small>Nessuna visita registrata oggi.</small></li>';
+  const visite = storico.filter(v => v.data === oggi() && v.operatore === operatore);
+  $('storico').innerHTML = visite.length ? visite.map(v => {
+    const fatte = [['arance', 'Arance'], ['pulizia', 'Pulizia'], ['bicchieri', 'Bicchieri'], ['scarti', 'Scarti']]
+      .filter(([c]) => v[c]).map(([, t]) => t).join(', ') || 'nessuna attività spuntata';
+    return `<li data-id="${esc(v.id)}"${v.id === inModifica ? ' class="in-modifica"' : ''}>
+      <strong>${esc(v.ora)}</strong> · ${esc(v.macchina)} – ${esc(v.posizione)} · ${String(v.temperatura).replace('.', ',')} °C<br>
+      <small>${esc(fatte)}${v.note ? ' · ' + esc(v.note) : ''}</small><br>
+      <small>${inAttesa.has(v.id) ? '⏳ in attesa di invio' : '✓ inviata'}</small>
+      <div class="azioni">
+        <button type="button" class="modifica">Modifica</button>
+        <button type="button" class="cancella">Cancella</button>
+      </div></li>`;
+  }).join('') : '<li><small>Nessuna visita registrata oggi.</small></li>';
+
+  $('storico').querySelectorAll('li[data-id]').forEach(li => {
+    const id = li.dataset.id;
+    li.querySelector('.modifica').onclick = () => modifica(id);
+    const b = li.querySelector('.cancella');
+    // Serve un secondo tocco per confermare
+    b.onclick = () => {
+      if (b.classList.contains('conferma')) return cancella(id);
+      b.classList.add('conferma');
+      b.textContent = 'Tocca ancora per cancellare';
+      setTimeout(() => { b.classList.remove('conferma'); b.textContent = 'Cancella'; }, 4000);
+    };
+  });
 }
 
 function esc(t) {
@@ -392,6 +508,7 @@ function esc(t) {
 // ---------- Avvio ----------
 function avvia() {
   if (!chiave) { mostra('vista-link'); return; }
+  esciModifica();
   if (!operatore) { disegnaOperatori(); mostra('vista-operatore'); return; }
   $('cambia-operatore').textContent = `${operatore} ▾`;
   disegnaMacchine();
