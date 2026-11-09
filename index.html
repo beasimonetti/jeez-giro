@@ -175,8 +175,8 @@
   <section id="vista-operatore" class="scheda nascosto">
     <label class="titolo">Chi sei?</label>
     <div id="elenco-operatori" class="elenco-nomi"></div>
-    <p id="nessun-operatore" class="stato nascosto">Elenco operatori non ancora disponibile. Scrivi il tuo nome:</p>
-    <div id="nome-libero" class="nascosto">
+    <p id="nessun-operatore" class="stato">Scrivi il tuo nome:</p>
+    <div id="nome-libero">
       <input type="text" id="nome-operatore" autocomplete="name" placeholder="Nome e cognome">
       <p></p>
       <button class="principale" id="conferma-nome">Continua</button>
@@ -304,8 +304,8 @@ function disegnaOperatori() {
   const nomi = elenchi.operatori;
   $('elenco-operatori').innerHTML = nomi.map(n => `<button type="button">${esc(n)}</button>`).join('');
   $('elenco-operatori').querySelectorAll('button').forEach((b, i) => b.onclick = () => scegliOperatore(nomi[i]));
-  $('nessun-operatore').classList.toggle('nascosto', nomi.length > 0);
-  $('nome-libero').classList.toggle('nascosto', nomi.length > 0);
+  // Si può sempre scrivere un nome che non è in elenco
+  $('nessun-operatore').textContent = nomi.length ? 'Non sei in elenco? Scrivi il tuo nome:' : 'Scrivi il tuo nome:';
 }
 
 function scegliOperatore(nome) {
