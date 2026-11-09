@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f07c00">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Jeez Giro">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icona-192.png">
+<title>Jeez Giro</title>
+<style>
+  :root {
+    --arancio: #f07c00;
+    --arancio-scuro: #c45f00;
+    --verde: #1f9d55;
+    --rosso: #d64545;
+    --testo: #1d1d1f;
+    --grigio: #6b6b70;
+    --bordo: #dcdce0;
+    --sfondo: #f6f5f2;
+    --scheda: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --testo: #f2f2f2;
+      --grigio: #a0a0a6;
+      --bordo: #3a3a3e;
+      --sfondo: #161618;
+      --scheda: #222225;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--sfondo);
+    color: var(--testo);
+    font-size: 17px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  header {
+    background: var(--arancio);
+    color: #fff;
+    padding: calc(env(safe-area-inset-top) + 12px) 16px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  header h1 { margin: 0; font-size: 21px; }
+  header button {
+    background: rgba(255,255,255,.2);
+    color: #fff;
+    border: 0;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 15px;
+  }
+  main { padding: 16px; max-width: 560px; margin: 0 auto; padding-bottom: 40px; }
+  .scheda {
+    background: var(--scheda);
+    border: 1px solid var(--bordo);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  label.titolo { display: block; font-weight: 600; margin-bottom: 8px; }
+  select, input[type=text], input[type=number], textarea {
+    width: 100%;
+    font-size: 18px;
+    padding: 12px;
+    border: 1px solid var(--bordo);
+    border-radius: 10px;
+    background: var(--scheda);
+    color: var(--testo);
+  }
+  textarea { min-height: 80px; resize: vertical; font-family: inherit; }
+  .attivita { display: grid; gap: 10px; }
+  .attivita button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+    font-size: 18px;
+    padding: 14px;
+    border: 2px solid var(--bordo);
+    border-radius: 12px;
+    background: var(--scheda);
+    color: var(--testo);
+  }
+  .attivita .spunta {
+    width: 28px; height: 28px; flex: none;
+    border: 2px solid var(--bordo);
+    border-radius: 8px;
+    display: grid; place-items: center;
+    font-weight: 700; color: #fff;
+  }
+  .attivita button[aria-pressed=true] { border-color: var(--verde); }
+  .attivita button[aria-pressed=true] .spunta { background: var(--verde); border-color: var(--verde); }
+  .temp { display: flex; align-items: center; gap: 10px; }
+  .temp input { flex: 1; }
+  .temp span { font-size: 20px; font-weight: 600; }
+  .principale {
+    width: 100%;
+    font-size: 20px;
+    font-weight: 700;
+    padding: 16px;
+    border: 0;
+    border-radius: 14px;
+    background: var(--arancio);
+    color: #fff;
+  }
+  .principale:active { background: var(--arancio-scuro); }
+  .errore { color: var(--rosso); font-weight: 600; margin: 0 0 12px; }
+  .stato { font-size: 14px; color: var(--grigio); margin: 0 0 12px; }
+  .stato.attesa { color: var(--rosso); font-weight: 600; }
+  .avviso {
+    position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 20px);
+    background: var(--verde); color: #fff; font-weight: 600;
+    padding: 14px; border-radius: 12px; text-align: center;
+    opacity: 0; transition: opacity .3s; pointer-events: none;
+  }
+  .avviso.visibile { opacity: 1; }
+  ul.storico { list-style: none; margin: 0; padding: 0; }
+  ul.storico li { padding: 10px 0; border-top: 1px solid var(--bordo); font-size: 15px; }
+  ul.storico li:first-child { border-top: 0; }
+  ul.storico small { color: var(--grigio); }
+  .nascosto { display: none; }
+  .elenco-nomi { display: grid; gap: 10px; }
+  .elenco-nomi button {
+    font-size: 18px; padding: 14px; border-radius: 12px;
+    border: 2px solid var(--bordo); background: var(--scheda); color: var(--testo);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Jeez Giro</h1>
+  <button id="cambia-operatore" class="nascosto"></button>
+</header>
+
+<main>
+  <!-- Link senza chiave -->
+  <section id="vista-link" class="scheda nascosto">
+    <p class="errore">Link non valido.</p>
+    <p>Apri l'app dal link che ti ha mandato l'ufficio.</p>
+  </section>
+
+  <!-- Scelta operatore -->
+  <section id="vista-operatore" class="scheda nascosto">
+    <label class="titolo">Chi sei?</label>
+    <div id="elenco-operatori" class="elenco-nomi"></div>
+    <p id="nessun-operatore" class="stato nascosto">Elenco operatori non ancora disponibile. Scrivi il tuo nome:</p>
+    <div id="nome-libero" class="nascosto">
+      <input type="text" id="nome-operatore" autocomplete="name" placeholder="Nome e cognome">
+      <p></p>
+      <button class="principale" id="conferma-nome">Continua</button>
+    </div>
+  </section>
+
+  <!-- Registrazione visita -->
+  <section id="vista-visita" class="nascosto">
+    <p id="stato-invio" class="stato"></p>
+    <p id="errore" class="errore nascosto"></p>
+
+    <div class="scheda">
+      <label class="titolo" for="macchina">Macchina</label>
+      <select id="macchina"></select>
+    </div>
+
+    <div class="scheda">
+      <label class="titolo">Attività fatte</label>
+      <div class="attivita">
+        <button type="button" data-campo="arance" aria-pressed="false"><span class="spunta">✓</span>Arance ricaricate</button>
+        <button type="button" data-campo="pulizia" aria-pressed="false"><span class="spunta">✓</span>Pulizia fatta</button>
+        <button type="button" data-campo="bicchieri" aria-pressed="false"><span class="spunta">✓</span>Bicchieri ricaricati</button>
+        <button type="button" data-campo="scarti" aria-pressed="false"><span class="spunta">✓</span>Scarti rimossi</button>
+      </div>
+    </div>
+
+    <div class="scheda">
+      <label class="titolo" for="temperatura">Temperatura interna</label>
+      <div class="temp">
+        <input type="text" id="temperatura" inputmode="decimal" placeholder="es. 4,5">
+        <span>°C</span>
+      </div>
+    </div>
+
+    <div class="scheda">
+      <label class="titolo" for="note">Note <small>(facoltative)</small></label>
+      <textarea id="note" placeholder="Es. guasto al display, macchina molto sporca…"></textarea>
+    </div>
+
+    <button class="principale" id="salva">Salva visita</button>
+
+    <div class="scheda" style="margin-top:20px">
+      <label class="titolo">Visite di oggi su questo telefono</label>
+      <ul id="storico" class="storico"></ul>
+    </div>
+  </section>
+</main>
+
+<div id="avviso" class="avviso"></div>
+
+<script>
+// Indirizzo dello script Google che riceve le visite
+const URL_SERVER = 'INSERIRE_URL_SCRIPT_GOOGLE';
+
+const $ = id => document.getElementById(id);
+
+function leggi(chiave, predefinito) {
+  try { const v = localStorage.getItem(chiave); return v === null ? predefinito : JSON.parse(v); }
+  catch (e) { return predefinito; }
+}
+function scrivi(chiave, valore) {
+  try { localStorage.setItem(chiave, JSON.stringify(valore)); } catch (e) {}
+}
+
+// La chiave arriva nel link: .../#k=CHIAVE
+const daLink = new URLSearchParams(location.hash.slice(1)).get('k');
+if (daLink) { scrivi('chiave', daLink); history.replaceState(null, '', location.pathname); }
+const chiave = leggi('chiave', null);
+
+let elenchi = leggi('elenchi', { macchine: [], operatori: [] });
+let operatore = leggi('operatore', null);
+let codaInvio = leggi('coda', []);
+let storico = leggi('storico', []);
+
+function mostra(vista) {
+  for (const v of ['vista-link', 'vista-operatore', 'vista-visita']) $(v).classList.toggle('nascosto', v !== vista);
+  $('cambia-operatore').classList.toggle('nascosto', vista !== 'vista-visita');
+}
+
+function avviso(testo) {
+  $('avviso').textContent = testo;
+  $('avviso').classList.add('visibile');
+  setTimeout(() => $('avviso').classList.remove('visibile'), 2500);
+}
+
+// ---------- Elenchi da Google ----------
+async function scaricaElenchi() {
+  try {
+    const r = await fetch(`${URL_SERVER}?azione=elenchi&k=${encodeURIComponent(chiave)}`);
+    const d = await r.json();
+    if (!d.ok) return;
+    elenchi = { macchine: d.macchine, operatori: d.operatori };
+    scrivi('elenchi', elenchi);
+    disegnaMacchine();
+    if (!operatore) disegnaOperatori();
+  } catch (e) { /* senza rete si usa l'elenco già salvato */ }
+}
+
+function disegnaMacchine() {
+  const scelta = $('macchina').value;
+  $('macchina').innerHTML = '<option value="">— Scegli la macchina —</option>' +
+    elenchi.macchine.map(m =>
+      `<option value="${esc(m.codice)}">${esc(m.codice)} – ${esc(m.posizione)}</option>`).join('');
+  $('macchina').value = scelta;
+}
+
+function disegnaOperatori() {
+  const nomi = elenchi.operatori;
+  $('elenco-operatori').innerHTML = nomi.map(n => `<button type="button">${esc(n)}</button>`).join('');
+  $('elenco-operatori').querySelectorAll('button').forEach((b, i) => b.onclick = () => scegliOperatore(nomi[i]));
+  $('nessun-operatore').classList.toggle('nascosto', nomi.length > 0);
+  $('nome-libero').classList.toggle('nascosto', nomi.length > 0);
+}
+
+function scegliOperatore(nome) {
+  operatore = nome;
+  scrivi('operatore', nome);
+  avvia();
+}
+
+$('conferma-nome').onclick = () => {
+  const nome = $('nome-operatore').value.trim();
+  if (nome) scegliOperatore(nome);
+};
+
+$('cambia-operatore').onclick = () => {
+  operatore = null;
+  scrivi('operatore', null);
+  avvia();
+};
+
+// ---------- Visita ----------
+document.querySelectorAll('.attivita button').forEach(b => b.onclick = () =>
+  b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'));
+
+function due(n) { return String(n).padStart(2, '0'); }
+
+$('salva').onclick = () => {
+  const codice = $('macchina').value;
+  const tempTesto = $('temperatura').value.trim().replace(',', '.');
+  const temperatura = Number(tempTesto);
+  $('errore').classList.add('nascosto');
+
+  let problema = '';
+  if (!codice) problema = 'Scegli la macchina.';
+  else if (tempTesto === '' || !isFinite(temperatura)) problema = 'Scrivi la temperatura (solo il numero).';
+  if (problema) {
+    $('errore').textContent = problema;
+    $('errore').classList.remove('nascosto');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  const ora = new Date();
+  const m = elenchi.macchine.find(x => x.codice === codice) || {};
+  const spuntato = campo => document.querySelector(`.attivita [data-campo=${campo}]`).getAttribute('aria-pressed') === 'true';
+  const visita = {
+    id: ora.getTime().toString(36) + Math.random().toString(36).slice(2, 7),
+    data: `${ora.getFullYear()}-${due(ora.getMonth() + 1)}-${due(ora.getDate())}`,
+    ora: `${due(ora.getHours())}:${due(ora.getMinutes())}`,
+    operatore,
+    macchina: codice,
+    posizione: m.posizione || '',
+    arance: spuntato('arance'),
+    pulizia: spuntato('pulizia'),
+    bicchieri: spuntato('bicchieri'),
+    scarti: spuntato('scarti'),
+    temperatura,
+    note: $('note').value.trim(),
+  };
+
+  codaInvio.push(visita);
+  scrivi('coda', codaInvio);
+  storico.unshift(visita);
+  storico = storico.slice(0, 50);
+  scrivi('storico', storico);
+
+  // Pulisce il modulo per la prossima macchina
+  $('macchina').value = '';
+  $('temperatura').value = '';
+  $('note').value = '';
+  document.querySelectorAll('.attivita button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  avviso('Visita salvata');
+  disegnaStorico();
+  inviaCoda();
+};
+
+// ---------- Invio (anche quando torna la rete) ----------
+let invioInCorso = false;
+async function inviaCoda() {
+  if (invioInCorso || !codaInvio.length) { disegnaStato(); return; }
+  invioInCorso = true;
+  try {
+    const r = await fetch(URL_SERVER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ azione: 'visite', k: chiave, visite: codaInvio }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      const ricevute = new Set(d.ricevute);
+      codaInvio = codaInvio.filter(v => !ricevute.has(v.id));
+      scrivi('coda', codaInvio);
+    }
+  } catch (e) { /* riprova più tardi */ }
+  invioInCorso = false;
+  disegnaStato();
+  disegnaStorico();
+}
+
+function disegnaStato() {
+  const n = codaInvio.length;
+  $('stato-invio').textContent = n
+    ? `${n} ${n === 1 ? 'visita' : 'visite'} in attesa di invio: partiranno appena c'è campo.`
+    : 'Tutte le visite sono state inviate.';
+  $('stato-invio').classList.toggle('attesa', n > 0);
+}
+
+function disegnaStorico() {
+  const oggi = new Date();
+  const dataOggi = `${oggi.getFullYear()}-${due(oggi.getMonth() + 1)}-${due(oggi.getDate())}`;
+  const inAttesa = new Set(codaInvio.map(v => v.id));
+  const visite = storico.filter(v => v.data === dataOggi);
+  $('storico').innerHTML = visite.length ? visite.map(v =>
+    `<li><strong>${esc(v.ora)}</strong> · ${esc(v.macchina)} – ${esc(v.posizione)} · ${String(v.temperatura).replace('.', ',')} °C<br>
+     <small>${inAttesa.has(v.id) ? '⏳ in attesa di invio' : '✓ inviata'}</small></li>`).join('')
+    : '<li><small>Nessuna visita registrata oggi.</small></li>';
+}
+
+function esc(t) {
+  return String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ---------- Avvio ----------
+function avvia() {
+  if (!chiave) { mostra('vista-link'); return; }
+  if (!operatore) { disegnaOperatori(); mostra('vista-operatore'); return; }
+  $('cambia-operatore').textContent = `${operatore} ▾`;
+  disegnaMacchine();
+  disegnaStato();
+  disegnaStorico();
+  mostra('vista-visita');
+}
+
+avvia();
+if (chiave) {
+  scaricaElenchi();
+  inviaCoda();
+  window.addEventListener('online', inviaCoda);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { inviaCoda(); scaricaElenchi(); } });
+  setInterval(inviaCoda, 60000);
+}
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
