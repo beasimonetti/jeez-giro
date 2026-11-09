@@ -66,7 +66,7 @@
     margin-bottom: 14px;
   }
   label.titolo { display: block; font-weight: 600; margin-bottom: 8px; }
-  select, input[type=text], input[type=number], textarea {
+  select, input[type=text], input[type=search], input[type=number], textarea {
     width: 100%;
     font-size: 18px;
     padding: 12px;
@@ -190,6 +190,8 @@
 
     <div class="scheda">
       <label class="titolo" for="macchina">Macchina</label>
+      <input type="search" id="cerca-macchina" placeholder="🔍 Cerca per nome o codice…" autocomplete="off">
+      <p></p>
       <select id="macchina"></select>
     </div>
 
@@ -276,13 +278,27 @@ async function scaricaElenchi() {
   } catch (e) { /* senza rete si usa l'elenco già salvato */ }
 }
 
+// Minuscolo e senza accenti, così "valecenter" trova "Valécenter"
+function semplifica(t) {
+  return String(t).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
 function disegnaMacchine() {
   const scelta = $('macchina').value;
-  $('macchina').innerHTML = '<option value="">— Scegli la macchina —</option>' +
-    elenchi.macchine.map(m =>
+  const parole = semplifica($('cerca-macchina').value).split(/\s+/).filter(Boolean);
+  const trovate = elenchi.macchine.filter(m => {
+    const testo = semplifica(`${m.codice} ${m.posizione}`);
+    return parole.every(p => testo.includes(p));
+  });
+  const vuota = parole.length && !trovate.length ? '— Nessuna macchina trovata —' : '— Scegli la macchina —';
+  $('macchina').innerHTML = `<option value="">${vuota}</option>` +
+    trovate.map(m =>
       `<option value="${esc(m.codice)}">${esc(m.codice)} – ${esc(m.posizione)}</option>`).join('');
-  $('macchina').value = scelta;
+  // Se la ricerca trova una sola macchina la sceglie da sola
+  $('macchina').value = parole.length && trovate.length === 1 ? trovate[0].codice : scelta;
 }
+
+$('cerca-macchina').oninput = disegnaMacchine;
 
 function disegnaOperatori() {
   const nomi = elenchi.operatori;
@@ -328,7 +344,9 @@ function mostraErrore(testo) {
 }
 
 function pulisciModulo() {
+  $('cerca-macchina').value = '';
   $('macchina').value = '';
+  disegnaMacchine();
   $('temperatura').value = '';
   $('note').value = '';
   document.querySelectorAll('.attivita button').forEach(b => b.setAttribute('aria-pressed', 'false'));
@@ -411,6 +429,8 @@ function modifica(id) {
   const v = storico.find(x => x.id === id);
   if (!v || v.data !== oggi()) return;
   inModifica = id;
+  $('cerca-macchina').value = '';
+  disegnaMacchine();
   $('macchina').value = v.macchina;
   $('temperatura').value = String(v.temperatura).replace('.', ',');
   $('note').value = v.note;

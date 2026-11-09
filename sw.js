@@ -1,5 +1,5 @@
 // Tiene l'app sul telefono per usarla anche senza campo
-const CACHE = 'jeez-giro-v2';
+const CACHE = 'jeez-giro-v3';
 const FILE = ['./', 'index.html', 'manifest.json', 'icona-192.png', 'icona-512.png'];
 
 self.addEventListener('install', e => {
