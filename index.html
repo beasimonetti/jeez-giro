@@ -49,10 +49,8 @@
     gap: 12px;
   }
   header h1 { margin: 0; font-size: 21px; }
-  header button {
+  header .nome {
     background: rgba(255,255,255,.2);
-    color: #fff;
-    border: 0;
     border-radius: 999px;
     padding: 6px 12px;
     font-size: 15px;
@@ -151,36 +149,24 @@
   ul.storico li:first-child { border-top: 0; }
   ul.storico small { color: var(--grigio); }
   .nascosto { display: none; }
-  .elenco-nomi { display: grid; gap: 10px; }
-  .elenco-nomi button {
-    font-size: 18px; padding: 14px; border-radius: 12px;
-    border: 2px solid var(--bordo); background: var(--scheda); color: var(--testo);
-  }
 </style>
 </head>
 <body>
 <header>
   <h1>Jeez Giro</h1>
-  <button id="cambia-operatore" class="nascosto"></button>
+  <span id="nome-operatore" class="nome nascosto"></span>
 </header>
 
 <main>
-  <!-- Link senza chiave -->
+  <!-- Link senza codice, o codice disattivato -->
   <section id="vista-link" class="scheda nascosto">
-    <p class="errore">Link non valido.</p>
-    <p>Apri l'app dal link che ti ha mandato l'ufficio.</p>
+    <p class="errore" id="testo-link">Link non valido.</p>
+    <p>Apri l'app dal tuo link personale che ti ha mandato l'ufficio.</p>
   </section>
 
-  <!-- Scelta operatore -->
-  <section id="vista-operatore" class="scheda nascosto">
-    <label class="titolo">Chi sei?</label>
-    <div id="elenco-operatori" class="elenco-nomi"></div>
-    <p id="nessun-operatore" class="stato">Scrivi il tuo nome:</p>
-    <div id="nome-libero">
-      <input type="text" id="nome-operatore" autocomplete="name" placeholder="Nome e cognome">
-      <p></p>
-      <button class="principale" id="conferma-nome">Continua</button>
-    </div>
+  <!-- Primo avvio: serve la rete per riconoscere il codice -->
+  <section id="vista-attesa" class="scheda nascosto">
+    <p id="testo-attesa">Controllo il tuo link…</p>
   </section>
 
   <!-- Registrazione visita -->
@@ -215,7 +201,7 @@
 
     <div class="scheda">
       <label class="titolo" for="note">Note <small>(facoltative)</small></label>
-      <textarea id="note" placeholder="Es. guasto al display, macchina molto sporca…"></textarea>
+      <textarea id="note" maxlength="500" placeholder="Es. guasto al display, macchina molto sporca…"></textarea>
     </div>
 
     <button class="principale" id="salva">Salva visita</button>
@@ -267,14 +253,16 @@ if (chiave) {
     'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(manifest));
 }
 
-let elenchi = leggi('elenchi', { macchine: [], operatori: [] });
-let operatore = leggi('operatore', null);
+// Il nome dell'operatore lo dice Google in base al codice personale del link
+let elenchi = leggi('elenchi', { macchine: [] });
+let operatore = leggi('codice-di', null) === chiave ? leggi('operatore', null) : null;
+let disattivato = false;
 let codaInvio = leggi('coda', []);
 let storico = leggi('storico', []);
 
 function mostra(vista) {
-  for (const v of ['vista-link', 'vista-operatore', 'vista-visita']) $(v).classList.toggle('nascosto', v !== vista);
-  $('cambia-operatore').classList.toggle('nascosto', vista !== 'vista-visita');
+  for (const v of ['vista-link', 'vista-attesa', 'vista-visita']) $(v).classList.toggle('nascosto', v !== vista);
+  $('nome-operatore').classList.toggle('nascosto', vista !== 'vista-visita');
 }
 
 function avviso(testo) {
@@ -288,12 +276,22 @@ async function scaricaElenchi() {
   try {
     const r = await fetch(`${URL_SERVER}?azione=elenchi&k=${encodeURIComponent(chiave)}`);
     const d = await r.json();
-    if (!d.ok) return;
-    elenchi = { macchine: d.macchine, operatori: d.operatori };
+    if (!d.ok) {
+      // Codice sconosciuto o disattivato dall'ufficio
+      if (d.errore === 'non autorizzato') { disattivato = true; avvia(); }
+      return;
+    }
+    elenchi = { macchine: d.macchine };
     scrivi('elenchi', elenchi);
-    disegnaMacchine();
-    if (!operatore) disegnaOperatori();
-  } catch (e) { /* senza rete si usa l'elenco già salvato */ }
+    const cambiato = operatore !== d.operatore;
+    operatore = d.operatore;
+    scrivi('operatore', operatore);
+    scrivi('codice-di', chiave);
+    if (cambiato) avvia(); else disegnaMacchine();
+  } catch (e) {
+    // senza rete si usa l'elenco già salvato
+    if (!operatore) $('testo-attesa').textContent = 'Serve internet la prima volta che apri il link. Riprova quando hai campo.';
+  }
 }
 
 // Minuscolo e senza accenti, così "valecenter" trova "Valécenter"
@@ -317,31 +315,6 @@ function disegnaMacchine() {
 }
 
 $('cerca-macchina').oninput = disegnaMacchine;
-
-function disegnaOperatori() {
-  const nomi = elenchi.operatori;
-  $('elenco-operatori').innerHTML = nomi.map(n => `<button type="button">${esc(n)}</button>`).join('');
-  $('elenco-operatori').querySelectorAll('button').forEach((b, i) => b.onclick = () => scegliOperatore(nomi[i]));
-  // Si può sempre scrivere un nome che non è in elenco
-  $('nessun-operatore').textContent = nomi.length ? 'Non sei in elenco? Scrivi il tuo nome:' : 'Scrivi il tuo nome:';
-}
-
-function scegliOperatore(nome) {
-  operatore = nome;
-  scrivi('operatore', nome);
-  avvia();
-}
-
-$('conferma-nome').onclick = () => {
-  const nome = $('nome-operatore').value.trim();
-  if (nome) scegliOperatore(nome);
-};
-
-$('cambia-operatore').onclick = () => {
-  operatore = null;
-  scrivi('operatore', null);
-  avvia();
-};
 
 // ---------- Visita ----------
 document.querySelectorAll('.attivita button').forEach(b => b.onclick = () =>
@@ -395,6 +368,7 @@ $('salva').onclick = () => {
 
   if (!codice) return mostraErrore('Scegli la macchina.');
   if (tempTesto === '' || !isFinite(temperatura)) return mostraErrore('Scrivi la temperatura (solo il numero).');
+  if (temperatura < -10 || temperatura > 40) return mostraErrore('La temperatura deve essere tra -10 e 40 °C.');
 
   const m = elenchi.macchine.find(x => x.codice === codice) || {};
   const spuntato = campo => document.querySelector(`.attivita [data-campo=${campo}]`).getAttribute('aria-pressed') === 'true';
@@ -493,7 +467,7 @@ async function inviaCoda() {
       codaInvio = codaInvio.filter(v => !(ricevute.has(v.id) && inviate.includes(v)));
       scrivi('coda', codaInvio);
       if (d.rifiutate && d.rifiutate.length)
-        avviso('Alcune modifiche non sono state accettate: si possono cambiare solo le visite di oggi.');
+        avviso('Alcune visite non sono state accettate: controlla macchina e temperatura, e ricorda che si cambiano solo quelle di oggi.');
     }
   } catch (e) { /* riprova più tardi */ }
   invioInCorso = false;
@@ -545,10 +519,14 @@ function esc(t) {
 
 // ---------- Avvio ----------
 function avvia() {
-  if (!chiave) { mostra('vista-link'); return; }
+  if (!chiave || disattivato) {
+    $('testo-link').textContent = disattivato ? 'Questo link non è più attivo.' : 'Link non valido.';
+    mostra('vista-link');
+    return;
+  }
   esciModifica();
-  if (!operatore) { disegnaOperatori(); mostra('vista-operatore'); return; }
-  $('cambia-operatore').textContent = `${operatore} ▾`;
+  if (!operatore) { mostra('vista-attesa'); return; }
+  $('nome-operatore').textContent = operatore;
   disegnaMacchine();
   disegnaStato();
   disegnaStorico();
